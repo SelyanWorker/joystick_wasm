@@ -20,6 +20,7 @@ class JoystickWidget
 public:
     void draw()
     {
+        ImGui::SetNextWindowPos(ImVec2(300, 20));
         ImGui::SetNextWindowSize(ImVec2(500, 600), ImGuiCond_FirstUseEver);
         ImGui::Begin("Joystick widget");
 
