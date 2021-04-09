@@ -15,16 +15,83 @@
 #include <emscripten.h>
 #include <SDL.h>
 #include <GLFW/glfw3.h>
-#include "SimpleLogger.h"
+#include "JoystickWidget.h"
 
 #include <array>
 
 GLFWwindow* window;
 
-// For clarity, our main loop code is declared at the end.
-static void main_loop();
+JoystickWidget joystickWidget;
 
-ExampleAppLog imguiLog;
+bool update_joystick(int glfw_joystick_id)
+{
+    if (!glfwJoystickPresent(glfw_joystick_id))
+        return false;
+
+    const char* name = glfwGetJoystickName(glfw_joystick_id);
+
+    int axes_count = 0;
+    const float *axes = glfwGetJoystickAxes(glfw_joystick_id, &axes_count);
+
+    int button_count = 0;
+    const unsigned char *buttons = glfwGetJoystickButtons(glfw_joystick_id, &button_count);
+
+    joystickWidget.update(axes_count, axes, button_count, buttons, name, glfw_joystick_id);
+
+    return true;
+}
+
+void draw_demo_windows()
+{
+    static bool show_demo_window = false;
+    static bool show_plot_demo_window = false;
+
+    ImGui::Begin("Demo windows");
+    ImGui::Checkbox("Show ImGui demo window", &show_demo_window);
+    ImGui::Checkbox("Show ImPlot demo window", &show_plot_demo_window);
+    ImGui::End();
+
+    if (show_demo_window)
+        ImGui::ShowDemoWindow(&show_demo_window);
+
+    if (show_plot_demo_window)
+        ImPlot::ShowDemoWindow(&show_plot_demo_window);
+}
+
+static void main_loop()
+{
+    ImGuiIO& io = ImGui::GetIO();
+
+    static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    // Poll and handle events (inputs, window resize, etc.)
+    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
+    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
+    // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+    glfwPollEvents();
+
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    draw_demo_windows();
+
+    if (update_joystick(GLFW_JOYSTICK_1))
+        joystickWidget.draw();
+
+    // Rendering
+    ImGui::Render();
+    int display_w, display_h;
+    glfwGetFramebufferSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    glfwSwapBuffers(window);
+}
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -74,108 +141,3 @@ int main(int, char**)
     emscripten_set_main_loop(main_loop, 0, 1);
 }
 
-struct JoyStickState
-{
-    int axes_count;
-    float axes[16];
-    int button_count;
-    unsigned char buttons[16];
-} last_joystick_state[16] = { 0 };
-
-bool update_joystick(int glfw_joystick_id, JoyStickState& prevState)
-{
-    if (!glfwJoystickPresent(glfw_joystick_id))
-        return false;
-
-    const char* name = glfwGetJoystickName(glfw_joystick_id);
-
-    int axes_count = 0;
-    const float *axes = glfwGetJoystickAxes(glfw_joystick_id, &axes_count);
-
-    int button_count = 0;
-    const unsigned char *buttons = glfwGetJoystickButtons(glfw_joystick_id, &button_count);
-
-    prevState.axes_count = axes_count;
-    for (int i = 0; i < axes_count; ++i) {
-        if (i == 8) continue;
-
-        if (prevState.axes[i] != axes[i] &&
-            i != 0 && i != 1)
-            imguiLog.AddLog("(%d %s) axis %d = %f\n", glfw_joystick_id, name, i, axes[i]);
-
-        prevState.axes[i] = axes[i];
-    }
-
-    prevState.button_count = button_count;
-    for (int i = 0; i < button_count; ++i)
-    {
-        if (prevState.buttons[i] != buttons[i])
-            imguiLog.AddLog("(%d %s) button %d = %d\n", glfw_joystick_id, name, i, buttons[i]);
-
-        prevState.buttons[i] = buttons[i];
-    }
-
-    return true;
-}
-
-void draw_plot(float x, float y)
-{
-    if (ImPlot::BeginPlot("Scatter Plot", "X", "Y"))
-    {
-        ImPlot::PushStyleVar(ImPlotStyleVar_FillAlpha, 0.25f);
-        ImPlot::SetNextMarkerStyle(ImPlotMarker_Square, 6, ImVec4(0, 1, 0, 0.5f), IMPLOT_AUTO,
-                                                                                          ImVec4(0, 1, 0, 1));
-        ImPlot::PlotScatter("Main axis", &x, &y, 1);
-        ImPlot::PopStyleVar();
-    }
-    ImPlot::EndPlot();
-}
-
-
-static void main_loop()
-{
-    ImGuiIO& io = ImGui::GetIO();
-
-    // Our state (make them static = more or less global) as a convenience to keep the example terse.
-    static bool show_demo_window = true;
-    static bool show_plot_demo_window = true;
-    static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    // Poll and handle events (inputs, window resize, etc.)
-    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-    // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-    glfwPollEvents();
-
-    // Start the Dear ImGui frame
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    if (show_demo_window)
-        ImGui::ShowDemoWindow(&show_demo_window);
-
-    if (show_plot_demo_window)
-        ImPlot::ShowDemoWindow(&show_plot_demo_window);
-
-    ImGui::SetNextWindowSize(ImVec2(500, 600), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Joystick widget");
-
-    if (update_joystick(GLFW_JOYSTICK_1, last_joystick_state[0]))
-        draw_plot(last_joystick_state[0].axes[0], last_joystick_state[0].axes[1]);
-
-    ImGui::End();
-    imguiLog.Draw("Joystick widget");
-
-    // Rendering
-    ImGui::Render();
-    int display_w, display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-    glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    glfwSwapBuffers(window);
-}
