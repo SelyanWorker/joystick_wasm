@@ -1,11 +1,15 @@
 #pragma once
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "implot.h"
 #include "SimpleLogger.h"
 
 #include <string>
 #include <vector>
+
 
 struct JoystickState
 {
@@ -49,32 +53,69 @@ public:
             m_state.axes[i] = axes[i];
         }
 
+        static ImVec2 prevPoint{ 0, 0 };
+        m_drawingPoints = false;
+
         //m_state.button_count = button_count;
         m_state.buttons.resize(button_count);
         for (int i = 0; i < m_state.buttons.size(); ++i)
         {
             if (m_state.buttons[i] != buttons[i])
-                m_logger.AddLog("(%d %s) button %d = %d\n", m_state.joystick_id, m_state.name.c_str(), i, m_state.buttons[i]);
+            {
+                m_logger.AddLog("(%d %s) button %d = %d\n", m_state.joystick_id, m_state.name.c_str(), i,
+                                m_state.buttons[i]);
+            }
 
             m_state.buttons[i] = buttons[i];
+
+            if (i == 13 && m_state.buttons[i] == 1)
+            {
+                ImVec2 currentPoint{m_state.axes[0], m_state.axes[1]};
+                m_points.push_back(currentPoint);
+                prevPoint = currentPoint;
+                m_drawingPoints = true;
+
+                continue;
+            }
+
+            if (i == 17 && m_state.buttons[i] == 1)
+            {
+                m_points.clear();
+                continue;
+            }
         }
     }
 
 private:
-    static void draw_main_axis_plot(float x, float y)
+    void draw_main_axis_plot(float x, float y)
     {
         if (ImPlot::BeginPlot("Scatter Plot", "X", "Y"))
         {
             ImPlot::PushStyleVar(ImPlotStyleVar_FillAlpha, 0.25f);
-            ImPlot::SetNextMarkerStyle(ImPlotMarker_Square, 6, ImVec4(0, 1, 0, 0.5f), IMPLOT_AUTO,
-                                       ImVec4(0, 1, 0, 1));
-            ImPlot::PlotScatter("Main axis", &x, &y, 1);
+
+            if (!m_drawingPoints)
+            {
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Square, 4, ImVec4(0, 1, 0, 0.5f), IMPLOT_AUTO,
+                                           ImVec4(0, 1, 0, 1));
+                ImPlot::PlotScatter("Main axis", &m_state.axes[0], &m_state.axes[1], 1);
+            }
+
+            for(auto point : m_points)
+            {
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Square, 4, ImVec4(1, 0, 0, 0.5f), IMPLOT_AUTO,
+                                           ImVec4(1, 0, 0, 1));
+                ImPlot::PlotScatter("Printed", &point.x, &point.y, 1);
+            }
             ImPlot::PopStyleVar();
         }
         ImPlot::EndPlot();
     }
 
 private:
+    std::vector<ImVec2> m_points;
+
+    bool m_drawingPoints = false;
+
     JoystickState m_state;
     ExampleAppLog m_logger;
 };

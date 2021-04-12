@@ -21,9 +21,21 @@
 
 GLFWwindow* window;
 
-JoystickWidget joystickWidget;
+JoystickWidget joystickWidget0;
 
-bool update_joystick(int glfw_joystick_id)
+std::vector<int> find_available_joysticks()
+{
+    std::vector<int> joysticks;
+    joysticks.reserve(GLFW_JOYSTICK_16 + 1);
+    for(int i = GLFW_JOYSTICK_1; i < GLFW_JOYSTICK_16; ++i)
+    {
+        if (glfwJoystickPresent(i))
+            joysticks.push_back(i);
+    }
+    return joysticks;
+}
+
+bool update_joystick(int glfw_joystick_id, JoystickWidget& jw)
 {
     if (!glfwJoystickPresent(glfw_joystick_id))
         return false;
@@ -36,7 +48,7 @@ bool update_joystick(int glfw_joystick_id)
     int button_count = 0;
     const unsigned char *buttons = glfwGetJoystickButtons(glfw_joystick_id, &button_count);
 
-    joystickWidget.update(axes_count, axes, button_count, buttons, name, glfw_joystick_id);
+    jw.update(axes_count, axes, button_count, buttons, name, glfw_joystick_id);
 
     return true;
 }
@@ -78,8 +90,9 @@ static void main_loop()
 
     draw_demo_windows();
 
-    if (update_joystick(GLFW_JOYSTICK_1))
-        joystickWidget.draw();
+    auto availableJoysticks = find_available_joysticks();
+    if (update_joystick(availableJoysticks.front(), joystickWidget0))
+        joystickWidget0.draw();
 
     // Rendering
     ImGui::Render();
